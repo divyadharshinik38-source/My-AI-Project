@@ -117,12 +117,109 @@ correct branching between "start" (candidate present) and "continue"
 matches `technical-spec.md`, then tested again with the real running
 server and real HTTP requests.
 
+## Phase 7 — Provider Migration: Gemini to Groq
+
+**Issue encountered (real, live debugging):** Gemini's free tier
+enforced a very low daily request quota (20 requests/day on this
+project) that was exhausted mid-testing, causing every question,
+follow-up, and feedback call to silently fail into fallback text.
+
+**Decision:** Migrated the LLM wrapper (app/llm.py) from Google's
+Gemini API to Groq (llama-3.3-70b-versatile), which offers a
+significantly higher free-tier request budget suitable for
+hackathon-speed iteration, while keeping identical function
+signatures so no other module needed to change.
+
+**Verification:** Ran a full 18-turn interview end-to-end post
+migration, confirming real generated questions, contextual
+follow-ups, and non-inflated structured feedback.
+
 ---
 
-## [Continue adding entries below as you build further]
+## Phase 7 — Frontend Chat UI
 
-## Phase 7 — [Fill in: e.g. frontend / demo UI]
+**Prompt (paraphrased):** Asked Claude for complete step-by-step
+frontend guidance to create a chat interface for the interview agent,
+including full code, files, and setup instructions.
 
-## Phase 8 — [Fill in: e.g. deployment]
+**Output used:** `frontend/index.html` — a single-file HTML/CSS/JS
+chat interface with a candidate dropdown (populated from
+candidates.json), chat bubbles for the conversation, and a feedback
+card rendered on interview completion. No frontend framework used —
+kept intentionally simple to avoid build tooling overhead during the
+hackathon window.
 
-## Phase 9 — [Fill in: e.g. final testing / bug fixes]
+**Debugging (real, iterative):**
+- First local test (opening the file directly via `file://`) failed
+  silently on the candidate dropdown due to browser fetch restrictions
+  on local files — fixed by serving the folder with
+  `python -m http.server` instead of double-clicking the HTML file.
+- "Start Interview" failed with `Failed to fetch` — root caused to
+  the backend not yet having CORS enabled for cross-origin requests
+  from the frontend's origin.
+
+**Human decision:** Chose plain HTML/JS over a framework (React,
+Vue) specifically to minimize setup time and avoid a build step,
+given the hackathon time constraint and that only one page was
+needed.
+
+---
+
+## Phase 8 — Deployment (Frontend + Backend CORS fix)
+
+**Prompt (paraphrased):** Asked Claude to identify why the deployed
+frontend couldn't reach the deployed backend, and to add CORS
+support to the FastAPI app.
+
+**Output used:** Added `CORSMiddleware` to `app/main.py` with
+`allow_origins=["*"]`, appropriate for a hackathon demo where the
+API has no authentication and isn't handling sensitive data.
+
+**Deployment steps (human-executed, Claude-guided):**
+- Backend deployed to Render (free tier), environment variable
+  (`GROQ_API_KEY`) set via Render's dashboard, never committed to
+  the repo.
+- Frontend deployed to Netlify via drag-and-drop of the `frontend`
+  folder, producing a public URL:
+  `https://cheerful-torte-554076.netlify.app`
+
+**Debugging (real, iterative):**
+- Verified the CORS fix was actually live using `curl -i` with an
+  explicit `Origin` header against the deployed Render URL, after an
+  earlier Python `requests` test gave a misleading result (that test
+  hadn't sent an `Origin` header, so it wasn't a valid CORS check).
+- New Netlify site defaulted to "Private" visibility (a platform
+  default introduced for accounts created after July 28, 2026),
+  which presented a password prompt to visitors. Resolved via
+  Project configuration → Visitor access → Project visibility → set
+  to Public.
+
+---
+
+## Phase 9 — Final Testing and Repo Cleanup
+
+**Prompt (paraphrased):** Asked Claude to check the complete pushed
+repository for issues before submission.
+
+**Findings and fixes (real, verified via cloning the actual public
+repo):**
+- Found and removed leftover/duplicate files at the repo root
+  (`main.py`, `candidates.json`, `curriculum.json`) that had been
+  introduced by an earlier merge and did not match the actual
+  working `app/` code — removed to avoid confusion during
+  authenticity review.
+- Found `.env` was tracked in git (content was harmless/placeholder,
+  not a real leaked key, verified by inspecting raw file bytes) and
+  `.gitignore` had a text-encoding issue preventing it from working
+  correctly — both fixed.
+- Confirmed README.md had not actually been updated from GitHub's
+  auto-generated stub despite earlier attempts — replaced with the
+  full project README (architecture, API contract, setup
+  instructions, known limitations).
+- Ran a full end-to-end interview test against the live deployed
+  backend directly (not localhost), confirming real generated
+  questions, contextual follow-ups, and non-inflated feedback in
+  production.
+- Ran the same full interview flow on the live Netlify frontend to
+  confirm the complete user-facing experience works, not just the
+  API in isolation.
