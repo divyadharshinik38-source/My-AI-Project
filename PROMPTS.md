@@ -35,10 +35,10 @@ InterviewResponse matching technical-spec.md's exact contract.
 > "move to Step 4" [after providing curriculum.json and
 > candidates.json]
 
-Result: `app/planner.py` — scoring logic prioritizing failed missions
-> skipped missions > struggled-but-passed > easy passes, verified
-against real candidate records (Sarah Johnson, Isabella Rossi) to
-confirm plans genuinely differ per candidate.
+Result: `app/planner.py` — scoring logic prioritizing failed
+missions > skipped missions > struggled-but-passed > easy passes,
+verified against real candidate records (Sarah Johnson, Isabella
+Rossi) to confirm plans genuinely differ per candidate.
 
 ---
 
@@ -47,7 +47,7 @@ confirm plans genuinely differ per candidate.
 > "move to Step 5 — the Gemini wrapper (`llm.py`)"
 
 Result: `app/llm.py` initial version using google-generativeai,
-later migrated (see below).
+later migrated (see entry 10).
 
 ---
 
@@ -123,7 +123,7 @@ before touching the full server.
 
 ---
 
-## 11. Full end-to-end verification
+## 11. Full end-to-end verification (backend)
 
 > "[pasted full 18-turn test_full_flow.py output, real questions,
 > real follow-ups referencing 'This is my test answer', real
@@ -136,7 +136,7 @@ session-completion guard working correctly.
 
 ---
 
-## 12. Deployment
+## 12. Deployment (backend)
 
 > "move to next" [after full local verification, requesting
 > deployment steps]
@@ -146,3 +146,113 @@ deployed to Render, environment variable (GROQ_API_KEY) configured
 in Render's dashboard rather than committed to the repo. Verified
 live: `POST https://interview-agent-ahj5.onrender.com/api/interview`
 returns a real generated question with status 200.
+
+---
+
+## 13. Repository audit
+
+> "check the complete project
+> https://github.com/divyadharshinik38-source/My-AI-Project/tree/main"
+
+Findings (via actually cloning the public repo, not just visual
+inspection): leftover/duplicate files at repo root (`main.py`,
+`candidates.json`, `curriculum.json`) from an earlier merge,
+unrelated to the real working code; `.env` tracked in git (content
+verified harmless via raw byte inspection, not a real leaked key);
+broken `.gitignore` (wrong text encoding); README.md still showing
+GitHub's auto-generated stub instead of the actual project README.
+
+---
+
+## 14. Repo cleanup
+
+> "i dont understand this [explanation of duplicate main.py issue] ...
+> give me the complete resdme.md"
+
+Result: Removed duplicate root-level files via `git rm`, rewrote
+`.gitignore` in plain text encoding, untracked `.env`, wrote and
+pushed the complete `README.md` (architecture diagram, API contract,
+setup instructions, known limitations).
+
+---
+
+## 15. Frontend build
+
+> "lets do the frontend give me the entire codes, files in step by
+> step"
+
+Result: `frontend/index.html` — single-file HTML/CSS/JS chat
+interface with a candidate dropdown, chat bubbles, and a feedback
+card rendered on completion. Verified JS syntax and structural
+elements before handoff.
+
+---
+
+## 16. Debugging: CORS and local file-serving
+
+> "[screenshot] Error starting interview: Failed to fetch"
+
+Diagnosis: two separate issues — (1) backend had no CORS middleware,
+blocking cross-origin requests from the frontend; (2) opening the
+HTML file directly via `file://` blocked `fetch()` calls to
+`candidates.json` due to browser local-file security restrictions.
+
+Result: Added `CORSMiddleware` to `app/main.py`; switched to serving
+the frontend via `python -m http.server` instead of double-clicking
+the file.
+
+---
+
+## 17. Debugging: verifying the CORS fix actually deployed
+
+> "200 None" [result of an initial CORS test that returned no
+> access-control-allow-origin header despite the fix being pushed]
+
+Diagnosis: the test method itself was flawed (a plain `requests.get()`
+call doesn't send an `Origin` header, so CORS headers are never
+returned regardless of server config — not a real bug). Confirmed
+the fix was actually live using `curl -i` with an explicit `Origin`
+header, and cross-checked against Render's dashboard deploy log
+showing the correct commit hash marked "Live."
+
+---
+
+## 18. Frontend deployment
+
+> "https://cheerful-torte-554076.netlify.app"
+
+Result: Frontend deployed to Netlify via drag-and-drop. Encountered
+an unexpected password prompt on first load — root-caused to a
+Netlify platform default (new sites created after July 28, 2026
+default to "Private" visibility). Resolved via Project configuration
+→ Visitor access → Project visibility → set to Public.
+
+---
+
+## 19. Final submission verification
+
+> "just tell me does this project satisfies all these conditions
+> [pasted full hackathon rules]"
+
+Verification performed: re-cloned the public repo fresh to confirm
+actual pushed state (not just local assumptions); checked real
+commit timestamps via `git log --reverse` to compare repo creation
+time against official kickoff time; confirmed AI_USAGE_LOG.md and
+PROMPTS.md both present and pushed.
+
+Finding: repo's first commit timestamp (2026-08-07 19:56:13 IST) was
+approximately 4 minutes before the official kickoff (2026-08-07
+20:00:00 IST) — flagged as a minor timing note or repo
+initialization/setup, with all substantive development commits
+following well after kickoff.
+
+---
+
+## 20. Submission mapping
+
+> "Submission [pasted the actual submission form fields]"
+
+Result: Confirmed which live URL to submit — the Netlify frontend
+URL (`https://cheerful-torte-554076.netlify.app`), since the form
+explicitly requested something a reviewer "can open" (Vercel,
+Netlify, or similar), not the raw backend API endpoint.
