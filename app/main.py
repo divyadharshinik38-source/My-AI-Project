@@ -14,12 +14,18 @@ import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-
+from fastapi.middleware.cors import CORSMiddleware
 from app.models import InterviewRequest, InterviewResponse, Feedback
 from app.interview_engine import start_interview, continue_interview
 from app.session_store import get_session
 
 app = FastAPI(title="AI Interview Agent")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Curriculum is fixed reference data -- load it once at startup rather
 # than on every request. Candidate data, by contrast, arrives IN the
