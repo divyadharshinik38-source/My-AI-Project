@@ -17,6 +17,7 @@ from fastapi import FastAPI, HTTPException
 
 from app.models import InterviewRequest, InterviewResponse, Feedback
 from app.interview_engine import start_interview, continue_interview
+from app.session_store import get_session
 
 app = FastAPI(title="AI Interview Agent")
 
@@ -43,6 +44,17 @@ def interview(req: InterviewRequest):
         return InterviewResponse(reply=reply, done=done)
 
     if req.message is not None:
+        # Guard against reusing a sessionId after the interview is
+        # already complete -- without this, continuing a finished
+        # session produces confusing/undefined behavior.
+        existing = get_session(req.sessionId)
+        if existing is not None and existing.done:
+            return InterviewResponse(
+                reply="This interview is already complete.",
+                done=True,
+                feedback=None,
+            )
+
         # Turn 2+: continue an existing interview session.
         reply, done, feedback_dict = continue_interview(req.sessionId, req.message)
         feedback = Feedback(**feedback_dict) if feedback_dict else None
