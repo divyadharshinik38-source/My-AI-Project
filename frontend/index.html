@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>AI Interview Agent</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+    background: #0f1117;
+    color: #e6e6e6;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    padding: 24px;
+  }
+  .app { width: 100%; max-width: 640px; }
+  h1 { font-size: 20px; margin-bottom: 4px; }
+  .subtitle { color: #9aa0a6; font-size: 13px; margin-bottom: 20px; }
+  .setup-row { display: flex; gap: 8px; margin-bottom: 16px; }
+  select, input[type=text], button {
+    font-size: 14px;
+    border-radius: 8px;
+    border: 1px solid #2a2d36;
+    padding: 10px 12px;
+    background: #1a1d25;
+    color: #e6e6e6;
+  }
+  select { flex: 1; }
+  button {
+    background: #4f7cff;
+    border: none;
+    cursor: pointer;
+    font-weight: 600;
+  }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button:hover:not(:disabled) { background: #3d67e6; }
+  #chat {
+    background: #14161d;
+    border: 1px solid #23262f;
+    border-radius: 12px;
+    padding: 16px;
+    height: 420px;
+    overflow-y: auto;
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .bubble {
+    max-width: 80%;
+    padding: 10px 14px;
+    border-radius: 14px;
+    line-height: 1.4;
+    font-size: 14px;
+    white-space: pre-wrap;
+  }
+  .agent { background: #23262f; align-self: flex-start; border-bottom-left-radius: 4px; }
+  .candidate { background: #4f7cff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .typing { align-self: flex-start; color: #9aa0a6; font-size: 13px; font-style: italic; }
+  .input-row { display: flex; gap: 8px; }
+  .input-row input { flex: 1; }
+  #feedback {
+    display: none;
+    margin-top: 16px;
+    background: #14161d;
+    border: 1px solid #23262f;
+    border-radius: 12px;
+    padding: 18px;
+  }
+  #feedback h2 { font-size: 16px; margin-top: 0; }
+  #feedback h3 { font-size: 13px; color: #9aa0a6; margin-bottom: 6px; }
+  #feedback ul { margin: 0 0 14px 18px; padding: 0; font-size: 14px; }
+  .strengths li { color: #7ee08a; }
+  .gaps li { color: #ff9c8f; }
+  .next li { color: #8ec6ff; }
+</style>
+</head>
+<body>
+<div class="app">
+  <h1>AI Interview Agent</h1>
+  <div class="subtitle">Team Byte &amp; Basil — pick a candidate and start the interview</div>
+
+  <div class="setup-row">
+    <select id="candidateSelect"></select>
+    <button id="startBtn">Start Interview</button>
+  </div>
+
+  <div id="chat"></div>
+
+  <div class="input-row">
+    <input type="text" id="messageInput" placeholder="Type your answer..." disabled>
+    <button id="sendBtn" disabled>Send</button>
+  </div>
+
+  <div id="feedback"></div>
+</div>
+
+<script>
+  // ---- CONFIGURE THIS: your deployed backend URL ----
+  const API_BASE = "https://interview-agent-ahj5.onrender.com";
+  // ----------------------------------------------------
+
+  let candidates = [];
+  let sessionId = null;
+  let interviewDone = false;
+
+  const chatEl = document.getElementById("chat");
+  const selectEl = document.getElementById("candidateSelect");
+  const startBtn = document.getElementById("startBtn");
+  const inputEl = document.getElementById("messageInput");
+  const sendBtn = document.getElementById("sendBtn");
+  const feedbackEl = document.getElementById("feedback");
+
+  async function loadCandidates() {
+    const res = await fetch("candidates.json");
+    const data = await res.json();
+    candidates = data.candidates;
+    selectEl.innerHTML = candidates
+      .map((c, i) => `<option value="${i}">${c.member.name} — ${c.member.jobRole}</option>`)
+      .join("");
+  }
+
+  function addBubble(text, sender) {
+    const div = document.createElement("div");
+    div.className = `bubble ${sender}`;
+    div.textContent = text;
+    chatEl.appendChild(div);
+    chatEl.scrollTop = chatEl.scrollHeight;
+  }
+
+  function showTyping(show) {
+    let el = document.getElementById("typingIndicator");
+    if (show) {
+      if (!el) {
+        el = document.createElement("div");
+        el.id = "typingIndicator";
+        el.className = "typing";
+        el.textContent = "Interviewer is thinking...";
+        chatEl.appendChild(el);
+        chatEl.scrollTop = chatEl.scrollHeight;
+      }
+    } else if (el) {
+      el.remove();
+    }
+  }
+
+  function renderFeedback(fb) {
+    feedbackEl.style.display = "block";
+    feedbackEl.innerHTML = `
+      <h2>Interview Feedback</h2>
+      <p>${fb.summary}</p>
+      <h3>Strengths</h3>
+      <ul class="strengths">${fb.strengths.map(s => `<li>${s}</li>`).join("") || "<li>None noted</li>"}</ul>
+      <h3>Gaps</h3>
+      <ul class="gaps">${fb.gaps.map(g => `<li>${g}</li>`).join("") || "<li>None noted</li>"}</ul>
+      <h3>Next Steps</h3>
+      <ul class="next">${fb.next.map(n => `<li>${n}</li>`).join("") || "<li>None noted</li>"}</ul>
+    `;
+  }
+
+  async function startInterview() {
+    const candidate = candidates[selectEl.value];
+    sessionId = "session-" + Date.now();
+    interviewDone = false;
+    chatEl.innerHTML = "";
+    feedbackEl.style.display = "none";
+    startBtn.disabled = true;
+    showTyping(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/interview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, candidate }),
+      });
+      const data = await res.json();
+      showTyping(false);
+      addBubble(data.reply, "agent");
+      inputEl.disabled = false;
+      sendBtn.disabled = false;
+      inputEl.focus();
+    } catch (err) {
+      showTyping(false);
+      addBubble("Error starting interview: " + err.message, "agent");
+    } finally {
+      startBtn.disabled = false;
+    }
+  }
+
+  async function sendMessage() {
+    const text = inputEl.value.trim();
+    if (!text || interviewDone) return;
+
+    addBubble(text, "candidate");
+    inputEl.value = "";
+    inputEl.disabled = true;
+    sendBtn.disabled = true;
+    showTyping(true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/interview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId, message: text }),
+      });
+      const data = await res.json();
+      showTyping(false);
+      addBubble(data.reply, "agent");
+
+      if (data.done) {
+        interviewDone = true;
+        if (data.feedback) renderFeedback(data.feedback);
+      } else {
+        inputEl.disabled = false;
+        sendBtn.disabled = false;
+        inputEl.focus();
+      }
+    } catch (err) {
+      showTyping(false);
+      addBubble("Error: " + err.message, "agent");
+      inputEl.disabled = false;
+      sendBtn.disabled = false;
+    }
+  }
+
+  startBtn.addEventListener("click", startInterview);
+  sendBtn.addEventListener("click", sendMessage);
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") sendMessage();
+  });
+
+  loadCandidates();
+</script>
+</body>
+</html>
